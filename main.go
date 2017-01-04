@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -64,7 +64,13 @@ func Main() error {
 		case "print":
 			doPrint = true
 		case "get":
-			fmt.Println(cfg.Get(path))
+			v := cfg.Get(path)
+			b, err := json.Marshal(map[string]interface{}{path: v})
+			if err != nil {
+				log.Println(err)
+			}
+			log.Println(v)
+			os.Stdout.Write(b)
 		case "set":
 			doPrint = true
 			var value string
