@@ -23,7 +23,7 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 		return Config{}, errors.Wrap(err, "ToJSON")
 	}
 	cfg, err := vedJSON.Decode(io.MultiReader(
-		strings.NewReader(`{"service_blocks":`),
+		strings.NewReader(`{"blocks":`),
 		bytes.NewReader(b),
 		strings.NewReader(`}`),
 	))
@@ -38,8 +38,8 @@ func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
 		return err
 	}
 	b := bytes.TrimSpace(buf.Bytes())
-	if bytes.HasPrefix(b, []byte(`{"service_blocks":[`)) && bytes.HasSuffix(b, []byte("]}")) {
-		b = b[18 : len(b)-1]
+	if bytes.HasPrefix(b, []byte(`{"blocks":[`)) && bytes.HasSuffix(b, []byte("]}")) {
+		b = b[10 : len(b)-1]
 	}
 	c, err := caddyfile.FromJSON(b)
 	if err != nil {

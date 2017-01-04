@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/magiconair/properties"
@@ -39,6 +40,8 @@ type EncoderDecoder interface {
 // Config is the read, modifyable configuration, based on *viper.Viper.
 type Config struct {
 	*viper.Viper
+	// tbd is the list of keys to be deleted (at Encode).
+	tbd []string
 }
 
 // Type represents a configuration file format.
@@ -122,3 +125,40 @@ func (ved viperEncDec) Encode(w io.Writer, cfg Config) error {
 }
 
 const keyDelim = "."
+
+func (cfg *Config) Del(key string) {
+	cfg.tbd = append(cfg.tbd, key)
+}
+
+// AllSettings returns all settings, excluding the deleted keys.
+func (cfg Config) AllSettings() map[string]interface{} {
+	m := cfg.Viper.AllSettings()
+	if len(cfg.tbd) == 0 {
+		return m
+	}
+	for _, key := range cfg.tbd {
+		delete(m, key)
+		key += keyDelim
+		for k := range m {
+			if strings.HasPrefix(k, key) {
+				delete(m, key)
+			}
+		}
+	}
+	return m
+}
+
+// Get returns the value for the key.
+//
+// If the key starts with "$", then a JSONPath-like TOML Query is compiled and executed.
+func (cfg Config) Get(key string) interface{} {
+	if !strings.HasPrefix(key, "$") {
+		return cfg.Viper.Get(key)
+	}
+	tt := toml.TreeFromMap(cfg.AllSettings())
+	qr, err := tt.Query(key)
+	if qr == nil {
+		return err
+	}
+	return qr
+}
