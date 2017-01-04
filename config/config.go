@@ -2,16 +2,18 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"strings"
 	"sync"
 
+	"github.com/hashicorp/hcl"
 	"github.com/magiconair/properties"
 	"github.com/pelletier/go-toml"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -37,9 +39,9 @@ type EncoderDecoder interface {
 	Decoder
 }
 
-// Config is the read, modifyable configuration, based on *viper.Viper.
+// Config is the read, modifyable configuration, based on *toml.TomlTree.
 type Config struct {
-	*viper.Viper
+	*toml.TomlTree
 	// tbd is the list of keys to be deleted (at Encode).
 	tbd []string
 }
@@ -50,12 +52,12 @@ type Type string
 var encdecMu sync.RWMutex
 var encdec = map[Type]EncoderDecoder{
 	"caddy":      caddyEncDec{},
-	"hcl":        viperEncDec{Type: "hcl"},
+	"hcl":        defaultEncDec{Type: "hcl"},
 	"ini":        iniEncDec{},
-	"json":       viperEncDec{Type: "json"},
-	"properties": viperEncDec{Type: "properties"},
-	"toml":       viperEncDec{Type: "toml"},
-	"yaml":       viperEncDec{Type: "yaml"},
+	"json":       defaultEncDec{Type: "json"},
+	"properties": defaultEncDec{Type: "properties"},
+	"toml":       defaultEncDec{Type: "toml"},
+	"yaml":       defaultEncDec{Type: "yaml"},
 }
 
 // Register a new EncoderDecoder. Will panic if typ already registered.
@@ -82,20 +84,51 @@ func Dumper(typ Type) Encoder {
 	return encdec[typ]
 }
 
-type viperEncDec struct{ Type string }
+type defaultEncDec struct{ Type string }
 
-func (ved viperEncDec) Decode(r io.Reader) (Config, error) {
-	cfg := Config{Viper: viper.New()}
+func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
+	m := make(map[string]interface{})
+	var b []byte
+	var cfg Config
 	switch ved.Type {
-	case "yaml", "json", "hcl", "toml", "properties":
-		cfg.SetConfigType(ved.Type)
-		err := cfg.ReadConfig(r)
-		return cfg, err
+	case "yaml", "hcl", "properties":
+		var err error
+		if b, err = ioutil.ReadAll(r); err != nil {
+			return cfg, err
+		}
+	}
+
+	switch ved.Type {
+	case "toml":
+		tt, err := toml.LoadReader(r)
+		return Config{TomlTree: tt}, err
+
+	case "yaml":
+		if err := yaml.Unmarshal(b, m); err != nil {
+			return cfg, err
+		}
+	case "json":
+		if err := json.NewDecoder(r).Decode(m); err != nil {
+			return cfg, err
+		}
+	case "hcl":
+		if err := hcl.Unmarshal(b, m); err != nil {
+			return cfg, err
+		}
+	case "properties":
+		props, err := properties.Load(b, properties.UTF8)
+		if err != nil {
+			return cfg, err
+		}
+		for _, k := range props.Keys() {
+			m[k], _ = props.Get(k)
+		}
 	default:
 		return cfg, errors.Wrap(ErrUnknownType, ved.Type)
 	}
+	return Config{TomlTree: toml.TreeFromMap(m)}, nil
 }
-func (ved viperEncDec) Encode(w io.Writer, cfg Config) error {
+func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 	m := cfg.AllSettings()
 	switch ved.Type {
 	case "yaml":
@@ -115,7 +148,7 @@ func (ved viperEncDec) Encode(w io.Writer, cfg Config) error {
 	case "properties":
 		p := properties.NewProperties()
 		for k := range m {
-			p.Set(k, cfg.GetString(k))
+			p.Set(k, fmt.Sprintf("%v", cfg.Get(k)))
 		}
 		_, err := p.Write(w, properties.UTF8)
 		return err
@@ -132,7 +165,7 @@ func (cfg *Config) Del(key string) {
 
 // AllSettings returns all settings, excluding the deleted keys.
 func (cfg Config) AllSettings() map[string]interface{} {
-	m := cfg.Viper.AllSettings()
+	m := cfg.TomlTree.ToMap()
 	if len(cfg.tbd) == 0 {
 		return m
 	}
@@ -153,12 +186,13 @@ func (cfg Config) AllSettings() map[string]interface{} {
 // If the key starts with "$", then a JSONPath-like TOML Query is compiled and executed.
 func (cfg Config) Get(key string) interface{} {
 	if !strings.HasPrefix(key, "$") {
-		return cfg.Viper.Get(key)
+		return cfg.TomlTree.Get(key)
 	}
 	tt := toml.TreeFromMap(cfg.AllSettings())
 	qr, err := tt.Query(key)
 	if qr == nil {
 		return err
 	}
+	return qr.Values()
 	return qr
 }

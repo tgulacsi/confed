@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -41,6 +43,7 @@ func Main() error {
 	if err != nil {
 		return errors.Wrap(err, "decode "+inp.Name())
 	}
+	log.Printf("read %#v", cfg.String())
 
 	if *flagNoCommands {
 		return enc.Encode(os.Stdout, cfg)
@@ -56,6 +59,19 @@ func Main() error {
 		line := bytes.TrimSpace(scanner.Bytes())
 		i := bytes.IndexByte(line, ' ')
 		if i < 0 {
+			if bytes.Equal(line, []byte("dump")) {
+				m := cfg.AllSettings()
+				log.Printf("DUMP %d", len(m))
+				keys := make([]string, 0, len(m))
+				for k := range m {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					fmt.Printf("%s: %+v\n", k, cfg.Get(k))
+				}
+				return nil
+			}
 			log.Printf("%d. no command in %q", lineNo, line)
 			continue
 		}
@@ -69,8 +85,9 @@ func Main() error {
 			if err != nil {
 				log.Println(err)
 			}
-			log.Printf("%#v", v)
+			//log.Printf("%#v", v)
 			os.Stdout.Write(b)
+			os.Stdout.Write([]byte{'\n'})
 		case "set":
 			doPrint = true
 			var value string

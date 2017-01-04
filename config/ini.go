@@ -6,8 +6,8 @@ import (
 	"io/ioutil"
 	"strings"
 
+	toml "github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 )
 
@@ -22,25 +22,24 @@ func (ed iniEncDec) Decode(r io.Reader) (Config, error) {
 	if err != nil {
 		return Config{}, errors.Wrap(err, string(b))
 	}
-	cfg := Config{Viper: viper.New()}
-	cfg.SetConfigType("ini")
+	tt := toml.TreeFromMap(make(map[string]interface{}))
 	for _, section := range f.Sections() {
-		sectName := section.Name()
+		path := []string{section.Name(), ""}[:1]
 		for _, key := range section.Keys() {
-			cfg.Set(fmt.Sprintf("%s%s%s", sectName, keyDelim, key.Name()), key.String())
+			tt.SetPath(append(path, key.Name()), key.String())
 		}
 	}
-	return cfg, nil
+	return Config{TomlTree: tt}, nil
 }
 func (ed iniEncDec) Encode(w io.Writer, cfg Config) error {
 	f := ini.Empty()
-	for _, key := range cfg.AllKeys() {
+	for _, key := range cfg.Keys() {
 		var section string
 		k := key
 		if i := strings.LastIndexByte(key, keyDelim[0]); i >= 0 {
 			section, k = key[:i], key[i+1:]
 		}
-		f.Section(section).Key(k).SetValue(cfg.GetString(key))
+		f.Section(section).Key(k).SetValue(fmt.Sprintf("%v", cfg.Get(key)))
 	}
 	_, err := f.WriteToIndent(w, "  ")
 	return errors.Wrap(err, "WriteToIndent")
