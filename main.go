@@ -69,7 +69,7 @@ func Main() error {
 			if err != nil {
 				log.Println(err)
 			}
-			log.Println(v)
+			log.Printf("%#v", v)
 			os.Stdout.Write(b)
 		case "set":
 			doPrint = true
