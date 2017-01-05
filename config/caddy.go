@@ -55,13 +55,14 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 					dir.Params = append(dir.Params, caddyLine{Name: token.Text})
 					continue
 				}
-				p := dir.Params[len(dir.Params)-1]
+				p := &dir.Params[len(dir.Params)-1]
 				p.Args = append(p.Args, token.Text)
 			}
 			if dir.Params != nil {
 				cb[k] = append(cb[k], dir)
 			}
 		}
+		log.Printf("cb=%#v", cb)
 		// key: {directive:}
 		for _, k := range block.Keys {
 			k = caddyQuoteKey(k)
@@ -69,14 +70,29 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 			for _, dirs := range cb {
 				for _, dir := range dirs {
 					path := append(path, dir.Main.Name)
-					tt.SetPath(path,
-						toIntfSlice(dir.Main.Args))
-					for i, sub := range dir.Params {
-						path := append(path, fmt.Sprintf("%d", i))
-						log.Printf("%q: %q", path, sub.Args)
-						tt.SetPath(
-							append(path, sub.Name),
-							toIntfSlice(sub.Args))
+					tt.SetPath(path, toIntfSlice(dir.Main.Args))
+					if len(dir.Params) == 0 {
+						continue
+					}
+					params := make(map[string][][]string, len(dir.Params))
+					for _, sub := range dir.Params {
+						params[sub.Name] = append(params[sub.Name], sub.Args)
+					}
+					for k, vv := range params {
+						path := append(path, k)
+						log.Println(path, vv)
+						switch len(vv) {
+						case 0:
+							tt.SetPath(path, "")
+						case 1:
+							tt.SetPath(path, toIntfSlice(vv[0]))
+						default:
+							ss := make([][]interface{}, len(vv))
+							for i, v := range vv {
+								ss[i] = toIntfSlice(v)
+							}
+							tt.SetPath(path, ss)
+						}
 					}
 				}
 			}
