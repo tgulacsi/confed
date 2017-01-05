@@ -1,8 +1,12 @@
 package config
 
 import (
+	"os"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mholt/caddy/caddyfile"
 )
 
 func TestCaddyParse(t *testing.T) {
@@ -12,6 +16,38 @@ func TestCaddyParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(cfg.String())
+}
+func TestCaddyBlocks(t *testing.T) {
+	os.Setenv("BRUNO_HOME", "{BRUNO_HOME}")
+	blocks, err := caddyfile.Parse("Caddyfile", strings.NewReader(caddyTest1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cb := convertCaddyBlock(blocks[0])
+	t.Log("cb:", cb)
+
+	for key, want := range map[string][]caddyDirective{
+		"tls": {{
+			Main: caddyLine{
+				Name: "tls",
+				Args: []string{"{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem",
+					"{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"}},
+			Params: []caddyLine{
+				caddyLine{Name: "protocols", Args: []string{"tls1.0", "tls1.2"}},
+			},
+		}},
+		"log": {{Main: caddyLine{Name: "log", Args: []string{"{BRUNO_HOME}/data/mai/log/ws-proxy.log"}}}},
+	} {
+		if got := cb[key]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: got %s, wanted %s.", key, got, want)
+		}
+	}
+
+	proxy := cb["proxy"]
+	if len(proxy) != 6 {
+		t.Errorf("Got %d proxy directives, wanted 6.", len(proxy))
+	}
+	t.Logf("proxy=%#v", proxy)
 }
 
 const caddyTest1 = `## WS-HTTP

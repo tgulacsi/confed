@@ -23,45 +23,9 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 		return Config{}, err
 	}
 
-	type caddyBlock map[string][]caddyDirective
-
 	tt := toml.TreeFromMap(make(map[string]interface{}, len(blocks)*64))
 	for _, block := range blocks {
-		cb := make(caddyBlock, len(block.Tokens))
-		for k, tokens := range block.Tokens {
-			var dir caddyDirective
-			var lastLine int
-			for _, token := range tokens {
-				prev := lastLine
-				lastLine = token.Line
-				if dir.Params == nil {
-					if token.Text == "{" {
-						dir.Params = make([]caddyLine, 0, 4)
-						continue
-					}
-					if dir.Main.Name == "" {
-						dir.Main.Name = token.Text
-						continue
-					}
-					dir.Main.Args = append(dir.Main.Args, token.Text)
-					continue
-				}
-				if token.Text == "}" {
-					cb[k] = append(cb[k], dir)
-					dir = caddyDirective{}
-					continue
-				}
-				if prev != token.Line {
-					dir.Params = append(dir.Params, caddyLine{Name: token.Text})
-					continue
-				}
-				p := &dir.Params[len(dir.Params)-1]
-				p.Args = append(p.Args, token.Text)
-			}
-			if dir.Params != nil {
-				cb[k] = append(cb[k], dir)
-			}
-		}
+		cb := convertCaddyBlock(block)
 		log.Printf("cb=%#v", cb)
 		// key: {directive:}
 		for _, k := range block.Keys {
@@ -105,6 +69,8 @@ func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
 	return ErrNotImplemented
 }
 
+type caddyBlock map[string][]caddyDirective
+
 type caddyDirective struct {
 	Main   caddyLine
 	Params []caddyLine
@@ -140,4 +106,42 @@ func asStringSlice(i interface{}) []string {
 		return ss
 	}
 	return nil
+}
+func convertCaddyBlock(block caddyfile.ServerBlock) caddyBlock {
+	cb := make(caddyBlock, len(block.Tokens))
+	for k, tokens := range block.Tokens {
+		var dir caddyDirective
+		var lastLine int
+		for _, token := range tokens {
+			prev := lastLine
+			lastLine = token.Line
+			if dir.Params == nil {
+				if token.Text == "{" {
+					dir.Params = make([]caddyLine, 0, 4)
+					continue
+				}
+				if dir.Main.Name == "" {
+					dir.Main.Name = token.Text
+					continue
+				}
+				dir.Main.Args = append(dir.Main.Args, token.Text)
+				continue
+			}
+			if token.Text == "}" {
+				cb[k] = append(cb[k], dir)
+				dir = caddyDirective{}
+				continue
+			}
+			if prev != token.Line {
+				dir.Params = append(dir.Params, caddyLine{Name: token.Text})
+				continue
+			}
+			p := &dir.Params[len(dir.Params)-1]
+			p.Args = append(p.Args, token.Text)
+		}
+		if dir.Params != nil {
+			cb[k] = append(cb[k], dir)
+		}
+	}
+	return cb
 }
