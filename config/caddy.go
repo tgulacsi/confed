@@ -109,15 +109,23 @@ func asStringSlice(i interface{}) []string {
 }
 func convertCaddyBlock(block caddyfile.ServerBlock) caddyBlock {
 	cb := make(caddyBlock, len(block.Tokens))
+	log.Printf("tokens=%v", block.Tokens)
 	for k, tokens := range block.Tokens {
 		var dir caddyDirective
-		var lastLine int
+		var inParams bool
 		for _, token := range tokens {
-			prev := lastLine
-			lastLine = token.Line
+			if dir.Main.Name == "log" {
+				log.Printf("%#v inParams=%t dir=%#v", token, inParams, dir)
+			}
+			if dir.Main.Name == k {
+				cb[k] = append(cb[k], dir)
+				dir = caddyDirective{}
+				inParams = false
+			}
 			if dir.Params == nil {
 				if token.Text == "{" {
 					dir.Params = make([]caddyLine, 0, 4)
+					inParams = true
 					continue
 				}
 				if dir.Main.Name == "" {
@@ -125,14 +133,18 @@ func convertCaddyBlock(block caddyfile.ServerBlock) caddyBlock {
 					continue
 				}
 				dir.Main.Args = append(dir.Main.Args, token.Text)
+				if dir.Main.Name == "log" {
+					log.Printf("dir=%#v", dir)
+				}
 				continue
 			}
 			if token.Text == "}" {
 				cb[k] = append(cb[k], dir)
 				dir = caddyDirective{}
+				inParams = false
 				continue
 			}
-			if prev != token.Line {
+			if inParams {
 				dir.Params = append(dir.Params, caddyLine{Name: token.Text})
 				continue
 			}
