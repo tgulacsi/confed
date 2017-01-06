@@ -24,7 +24,7 @@ func TestCaddyBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cb := convertCaddyBlock(blocks[0])
-	t.Log("cb:", cb)
+	t.Logf("cb:%#v", cb)
 
 	for key, want := range map[string][]caddyDirective{
 		"tls": {{

@@ -109,51 +109,71 @@ func asStringSlice(i interface{}) []string {
 }
 func convertCaddyBlock(block caddyfile.ServerBlock) caddyBlock {
 	cb := make(caddyBlock, len(block.Tokens))
-	log.Printf("tokens=%v", block.Tokens)
 	for k, tokens := range block.Tokens {
-		var dir caddyDirective
-		var inParams bool
-		for _, token := range tokens {
-			if dir.Main.Name == "log" {
-				log.Printf("%#v inParams=%t dir=%#v", token, inParams, dir)
-			}
-			if dir.Main.Name == k {
-				cb[k] = append(cb[k], dir)
-				dir = caddyDirective{}
-				inParams = false
-			}
-			if dir.Params == nil {
-				if token.Text == "{" {
-					dir.Params = make([]caddyLine, 0, 4)
-					inParams = true
-					continue
-				}
-				if dir.Main.Name == "" {
-					dir.Main.Name = token.Text
-					continue
-				}
-				dir.Main.Args = append(dir.Main.Args, token.Text)
-				if dir.Main.Name == "log" {
-					log.Printf("dir=%#v", dir)
-				}
+		// first, we separate the directives' tokens
+		var prev int
+		for i, token := range tokens {
+			if token.Text != k {
 				continue
 			}
-			if token.Text == "}" {
-				cb[k] = append(cb[k], dir)
-				dir = caddyDirective{}
-				inParams = false
+			if prev == i {
 				continue
 			}
-			if inParams {
-				dir.Params = append(dir.Params, caddyLine{Name: token.Text})
-				continue
-			}
-			p := &dir.Params[len(dir.Params)-1]
-			p.Args = append(p.Args, token.Text)
+			// new group starts here
+			cb[k] = append(cb[k], caddyParseTokenGroup(tokens[prev:i]))
+			prev = i
 		}
-		if dir.Params != nil {
-			cb[k] = append(cb[k], dir)
-		}
+		cb[k] = append(cb[k], caddyParseTokenGroup(tokens[prev:]))
 	}
 	return cb
+}
+
+// then, convert groups to directives
+func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
+	dir := caddyDirective{Main: caddyLine{Name: tokens[0].Text}}
+	tokens = tokens[1:]
+	ss := make([]string, 0, len(tokens))
+
+	var inParams bool
+	var prev int
+	var param caddyLine
+	for _, token := range tokens {
+		if dir.Main.Name == "log" {
+			fmt.Printf("%q dir=%#v ss=%q\n", token.Text, dir, ss)
+		}
+		if !inParams {
+			if token.Text != "{" {
+				ss = append(ss, token.Text)
+				continue
+			}
+			inParams = true
+			dir.Main.Args = ss[:len(ss):len(ss)]
+			ss = ss[len(ss):]
+			continue
+		}
+		if token.Text == "}" {
+			break
+		}
+		if prev != token.Line { // new param
+			prev = token.Line
+			if param.Name != "" {
+				dir.Params = append(dir.Params, param)
+			}
+		}
+		if param.Name == "" {
+			param.Name = token.Text
+			continue
+		}
+		ss = append(ss, token.Text)
+	}
+
+	if !inParams {
+		if len(ss) > 0 {
+			dir.Main.Args = ss[:len(ss):len(ss)]
+		}
+	} else if param.Name != "" {
+		param.Args = ss
+		dir.Params = append(dir.Params, param)
+	}
+	return dir
 }
