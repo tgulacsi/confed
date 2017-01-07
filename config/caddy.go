@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/mholt/caddy/caddyfile"
@@ -45,7 +46,6 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 						}
 						continue
 					}
-					path = append(path, "params")
 					for _, vv := range dir.Params {
 						written = true
 						path := append(path, vv.Name)
@@ -65,8 +65,57 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 
 	return Config{TomlTree: tt}, nil
 }
+
 func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
-	return ErrNotImplemented
+	m0 := cfg.TomlTree.ToMap()
+	for rK, rV := range m0 {
+		m1, ok := rV.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(w, "%s {\n", caddyUnquoteKey(rK))
+		for k, v := range m1 {
+			m2, ok := v.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			fmt.Fprintf(w, "\t%s ", k)
+			args := asStringSlice(m2["args"])
+			var minus int
+			if len(args) != 0 {
+				minus = 1
+				quoteSlice(args, " ")
+				fmt.Fprintf(w, "%s", strings.Join(args, " "))
+			}
+			if len(m2) == minus {
+				fmt.Fprintf(w, "\n")
+				continue
+			}
+			fmt.Fprintf(w, " {\n")
+			for kk, vv := range m2 {
+				if kk == "args" {
+					continue
+				}
+				fmt.Fprintf(w, "\t\t%s", kk)
+				args = asStringSlice(vv)
+				if len(args) == 0 {
+					continue
+				}
+				quoteSlice(args, " ")
+				for i, s := range args {
+					sep := " "
+					if i == 0 {
+						sep = "\t"
+					}
+					fmt.Fprintf(w, "%s%s", sep, s)
+				}
+				fmt.Fprintf(w, "\n")
+			}
+			fmt.Fprintf(w, "\t}\n")
+		}
+		fmt.Fprintf(w, "}\n")
+	}
+	return nil
 }
 
 type caddyBlock map[string][]caddyDirective
@@ -183,4 +232,12 @@ func asStringSlice(i interface{}) []string {
 		return ss
 	}
 	return nil
+}
+
+func quoteSlice(ss []string, sep string) {
+	for i, s := range ss {
+		if strings.Contains(s, sep) {
+			ss[i] = strconv.Quote(s)
+		}
+	}
 }
