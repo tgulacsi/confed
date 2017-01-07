@@ -43,7 +43,7 @@ func Main() error {
 	if err != nil {
 		return errors.Wrap(err, "decode "+inp.Name())
 	}
-	log.Printf("read %#v", cfg.String())
+	log.Printf("read %s", cfg.String())
 
 	if *flagNoCommands {
 		return enc.Encode(os.Stdout, cfg)

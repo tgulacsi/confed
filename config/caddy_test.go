@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -10,6 +11,17 @@ import (
 	"github.com/kylelemons/godebug/diff"
 	"github.com/mholt/caddy/caddyfile"
 )
+
+func init() {
+	for _, s := range []string{
+		"BRUNO_HOME",
+		"portof_dealer_szerzodesek",
+	} {
+		if os.Getenv(s) == "" {
+			os.Setenv(s, fmt.Sprintf("{%s}", s))
+		}
+	}
+}
 
 func TestCaddyParse(t *testing.T) {
 	var ed caddyEncDec
@@ -20,7 +32,6 @@ func TestCaddyParse(t *testing.T) {
 	t.Log(cfg.String())
 }
 func TestCaddyBlocks(t *testing.T) {
-	os.Setenv("BRUNO_HOME", "{BRUNO_HOME}")
 	blocks, err := caddyfile.Parse("Caddyfile", strings.NewReader(caddyTest1), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +91,51 @@ func TestCaddyBlocks(t *testing.T) {
 	}
 	t.Logf("proxy=%#v", proxy)
 }
+
+func TestConvertCT(t *testing.T) {
+	var ed caddyEncDec
+	cfg, err := ed.Decode(strings.NewReader(caddyTest1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := diff.Diff(caddyTest1TOML, cfg.String()); d != "" {
+		t.Error(d)
+	}
+}
+
+const caddyTest1TOML = `[http://0%2E0%2E0%2E0:4444]
+  without = ["/metrics/mabisz"]
+  header_upstream = ["-Proxy",""]
+  proxy = ["/","http://192.168.3.110:3000"]
+  log = ["/data/mai/log/grafana-proxy.log"]
+
+[https://0%2E0%2E0%2E0:]
+  rewrite = []
+  transparent = []
+  try_duration = ["10s"]
+  without = ["/_macroexpert"]
+  policy = ["least_conn"]
+  max_fails = ["1"]
+  fail_timeout = ["9s"]
+  proxy = ["/","http://localhost:"]
+  protocols = ["tls1.0","tls1.2"]
+  to = ["/letme/Dealer/{1}"]
+  header_upstream = ["-Proxy",""]
+  tls = ["/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
+  r = ["^(/letme)?/Dealer/Dealer/(.*)"]
+  log = ["/data/mai/log/splprn_admin-proxy.log"]
+
+[http://0%2E0%2E0%2E0:]
+  max_fails = ["3"]
+  log = ["/data/mai/log/aodb-proxy.log"]
+  try_duration = ["3s"]
+  without = ["/_macroexpert"]
+  header_upstream = ["-Proxy",""]
+  proxy = ["/","unix:/data/ws/aodb.socket"]
+  fail_timeout = ["1s"]
+  transparent = []
+  policy = ["least_conn"]
+`
 
 const caddyTest1 = `## WS-HTTP
 #http://0.0.0.0:{$portof_ws_http} {

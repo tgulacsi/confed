@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,6 +45,14 @@ type Config struct {
 	*toml.TomlTree
 	// tbd is the list of keys to be deleted (at Encode).
 	tbd []string
+}
+
+func (cfg Config) String() string {
+	var buf bytes.Buffer
+	if _, err := cfg.TomlTree.WriteToToml(&buf, "", ""); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
 
 // Type represents a configuration file format.
