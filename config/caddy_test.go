@@ -16,6 +16,12 @@ func init() {
 	for _, s := range []string{
 		"BRUNO_HOME",
 		"portof_dealer_szerzodesek",
+		"portof_splprn_admin_https",
+		"portof_splprn_admin",
+		"portof_aodb_https",
+		"portof_aodb_http",
+		"portof_mevv",
+		"portof_ws",
 	} {
 		if os.Getenv(s) == "" {
 			os.Setenv(s, fmt.Sprintf("{%s}", s))
@@ -98,43 +104,107 @@ func TestConvertCT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := diff.Diff(caddyTest1TOML, cfg.String()); d != "" {
+	want, got := caddyTest1TOML, cfg.String()
+	t.Log("Got:")
+	t.Log(got)
+	if d := diff.Diff(want, got); d != "" {
 		t.Error(d)
 	}
 }
 
-const caddyTest1TOML = `[http://0%2E0%2E0%2E0:4444]
-  without = ["/metrics/mabisz"]
-  header_upstream = ["-Proxy",""]
-  proxy = ["/","http://192.168.3.110:3000"]
-  log = ["/data/mai/log/grafana-proxy.log"]
+const caddyTest1TOML = `
+[http://0%2E0%2E0%2E0:4444]
 
-[https://0%2E0%2E0%2E0:]
-  rewrite = []
-  transparent = []
-  try_duration = ["10s"]
-  without = ["/_macroexpert"]
-  policy = ["least_conn"]
-  max_fails = ["1"]
-  fail_timeout = ["9s"]
-  proxy = ["/","http://localhost:"]
-  protocols = ["tls1.0","tls1.2"]
-  to = ["/letme/Dealer/{1}"]
-  header_upstream = ["-Proxy",""]
-  tls = ["/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
-  r = ["^(/letme)?/Dealer/Dealer/(.*)"]
-  log = ["/data/mai/log/splprn_admin-proxy.log"]
+  [http://0%2E0%2E0%2E0:4444.log]
+    args = ["{BRUNO_HOME}/data/mai/log/grafana-proxy.log"]
 
-[http://0%2E0%2E0%2E0:]
-  max_fails = ["3"]
-  log = ["/data/mai/log/aodb-proxy.log"]
-  try_duration = ["3s"]
-  without = ["/_macroexpert"]
-  header_upstream = ["-Proxy",""]
-  proxy = ["/","unix:/data/ws/aodb.socket"]
-  fail_timeout = ["1s"]
-  transparent = []
-  policy = ["least_conn"]
+  [http://0%2E0%2E0%2E0:4444.proxy]
+    args = ["/","http://192.168.3.110:3000"]
+
+    [http://0%2E0%2E0%2E0:4444.proxy.params]
+      header_upstream = ["-Proxy",""]
+      without = ["/metrics/mabisz"]
+
+[http://0%2E0%2E0%2E0:{portof_aodb_http}]
+
+  [http://0%2E0%2E0%2E0:{portof_aodb_http}.log]
+    args = ["{BRUNO_HOME}/data/mai/log/aodb-proxy.log"]
+
+  [http://0%2E0%2E0%2E0:{portof_aodb_http}.proxy]
+    args = ["/","unix:{BRUNO_HOME}/data/ws/aodb.socket"]
+
+    [http://0%2E0%2E0%2E0:{portof_aodb_http}.proxy.params]
+      fail_timeout = ["1s"]
+      header_upstream = ["-Proxy",""]
+      max_fails = ["3"]
+      policy = ["least_conn"]
+      transparent = ""
+      try_duration = ["3s"]
+      without = ["/_macroexpert"]
+
+[https://0%2E0%2E0%2E0:{portof_aodb_https}]
+
+  [https://0%2E0%2E0%2E0:{portof_aodb_https}.log]
+    args = ["{BRUNO_HOME}/data/mai/log/aodb-proxy-https.log"]
+
+  [https://0%2E0%2E0%2E0:{portof_aodb_https}.proxy]
+    args = ["/","http://localhost:"]
+
+    [https://0%2E0%2E0%2E0:{portof_aodb_https}.proxy.params]
+      header_upstream = ["-Proxy",""]
+      without = ["/_macroexpert"]
+
+  [https://0%2E0%2E0%2E0:{portof_aodb_https}.tls]
+    args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
+
+    [https://0%2E0%2E0%2E0:{portof_aodb_https}.tls.params]
+      protocols = ["tls1.0","tls1.2"]
+
+[https://0%2E0%2E0%2E0:{portof_splprn_admin_https}]
+
+  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.log]
+    args = ["{BRUNO_HOME}/data/mai/log/splprn_admin-proxy.log"]
+
+  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.proxy]
+    args = ["/","http://localhost:{portof_splprn_admin}"]
+
+    [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.proxy.params]
+      header_upstream = ["-Proxy",""]
+
+  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.tls]
+    args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
+
+    [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.tls.params]
+      protocols = ["tls1.0","tls1.2"]
+
+[https://0%2E0%2E0%2E0:{portof_ws}]
+
+  [https://0%2E0%2E0%2E0:{portof_ws}.log]
+    args = ["{BRUNO_HOME}/data/mai/log/ws-proxy.log"]
+
+  [https://0%2E0%2E0%2E0:{portof_ws}.proxy]
+    args = ["/","unix:{BRUNO_HOME}/data/ws/ws-1.socket","unix:{BRUNO_HOME}/data/ws/ws-1.socket"]
+
+    [https://0%2E0%2E0%2E0:{portof_ws}.proxy.params]
+      fail_timeout = ["9s"]
+      header_upstream = ["X-Forwarded-For","{remote}"]
+      max_fails = ["1"]
+      policy = ["least_conn"]
+      transparent = ""
+      try_duration = ["10s"]
+      without = ["/letme"]
+
+  [https://0%2E0%2E0%2E0:{portof_ws}.rewrite]
+
+    [https://0%2E0%2E0%2E0:{portof_ws}.rewrite.params]
+      r = ["^(/letme)?/Dealer/Dealer/(.*)"]
+      to = ["/letme/Dealer/{1}"]
+
+  [https://0%2E0%2E0%2E0:{portof_ws}.tls]
+    args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
+
+    [https://0%2E0%2E0%2E0:{portof_ws}.tls.params]
+      protocols = ["tls1.0","tls1.2"]
 `
 
 const caddyTest1 = `## WS-HTTP

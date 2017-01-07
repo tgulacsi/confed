@@ -34,30 +34,29 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 			for _, dirs := range cb {
 				for _, dir := range dirs {
 					path := append(path, dir.Main.Name)
-					tt.SetPath(path, toIntfSlice(dir.Main.Args))
+					var written bool
+					if len(dir.Main.Args) != 0 {
+						tt.SetPath(append(path, "args"), toIntfSlice(dir.Main.Args))
+						written = true
+					}
 					if len(dir.Params) == 0 {
+						if !written {
+							tt.SetPath(path, "")
+						}
 						continue
 					}
-					params := make(map[string][][]string, len(dir.Params))
-					for _, sub := range dir.Params {
-						params[sub.Name] = append(params[sub.Name], sub.Args)
-					}
-					for k, vv := range params {
-						path := append(path, k)
-						log.Println(path, vv)
-						switch len(vv) {
-						case 0:
+					path = append(path, "params")
+					for _, vv := range dir.Params {
+						written = true
+						path := append(path, vv.Name)
+						if len(vv.Args) == 0 {
 							tt.SetPath(path, "")
-						case 1:
-							tt.SetPath(path, toIntfSlice(vv[0]))
-						default:
-							log.Printf("%q: %#v", k, vv)
-							ss := make([][]interface{}, len(vv))
-							for i, v := range vv {
-								ss[i] = toIntfSlice(v)
-							}
-							tt.SetPath(path, ss)
+						} else {
+							tt.SetPath(path, toIntfSlice(vv.Args))
 						}
+					}
+					if !written {
+						tt.SetPath(path, "")
 					}
 				}
 			}
