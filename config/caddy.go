@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 
@@ -27,7 +26,6 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 	tt := toml.TreeFromMap(make(map[string]interface{}, len(blocks)*64))
 	for _, block := range blocks {
 		cb := convertCaddyBlock(block)
-		log.Printf("cb=%#v", cb)
 		// key: {directive:}
 		for _, k := range block.Keys {
 			k = caddyQuoteKey(k)
@@ -156,16 +154,10 @@ func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
 	tokens = tokens[1:]
 	ss := make([]string, 0, len(tokens))
 
-	if dir.Main.Name == "rewrite" {
-		fmt.Printf("%q: %#v", dir.Main.Name, tokens)
-	}
 	var inParams bool
 	var prev int
 	var param caddyLine
 	for _, token := range tokens {
-		if dir.Main.Name == "rewrite" {
-			fmt.Printf("%q dir=%#v iP=%t ss=%q\n", token.Text, dir, inParams, ss)
-		}
 		if !inParams {
 			if token.Text != "{" {
 				ss = append(ss, token.Text)
