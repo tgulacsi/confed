@@ -66,35 +66,37 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 
 func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
 	m0 := cfg.TomlTree.ToMap()
+	seen := make(map[string][]string, len(m0))
+	var buf bytes.Buffer
 	for rK, rV := range m0 {
 		m1, ok := rV.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(w, "%s {\n", caddyUnquoteKey(rK))
+		buf.Reset()
 		for k, v := range m1 {
 			m2, ok := v.(map[string]interface{})
 			if !ok {
 				continue
 			}
-			fmt.Fprintf(w, "\t%s ", k)
+			fmt.Fprintf(&buf, "\t%s ", k)
 			args := asStringSlice(m2["args"])
 			var minus int
 			if len(args) != 0 {
 				minus = 1
 				quoteSlice(args, " ")
-				fmt.Fprintf(w, "%s", strings.Join(args, " "))
+				fmt.Fprintf(&buf, "%s", strings.Join(args, " "))
 			}
 			if len(m2) == minus {
-				fmt.Fprintf(w, "\n")
+				fmt.Fprintf(&buf, "\n\n")
 				continue
 			}
-			fmt.Fprintf(w, " {\n")
+			fmt.Fprintf(&buf, " {\n")
 			for kk, vv := range m2 {
 				if kk == "args" {
 					continue
 				}
-				fmt.Fprintf(w, "\t\t%s", kk)
+				fmt.Fprintf(&buf, "\t\t%s", kk)
 				args = asStringSlice(vv)
 				if len(args) == 0 {
 					continue
@@ -105,15 +107,22 @@ func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
 					if i == 0 {
 						sep = "\t"
 					}
-					fmt.Fprintf(w, "%s%s", sep, s)
+					fmt.Fprintf(&buf, "%s%s", sep, s)
 				}
-				fmt.Fprintf(w, "\n")
+				fmt.Fprintf(&buf, "\n")
 			}
-			fmt.Fprintf(w, "\t}\n")
+			fmt.Fprintf(&buf, "\t}\n\n")
 		}
-		fmt.Fprintf(w, "}\n")
+		k := buf.String()
+		seen[k] = append(seen[k], caddyUnquoteKey(rK))
 	}
-	return nil
+
+	ew := newErrWriter(w)
+	for text, keys := range seen {
+		quoteSlice(keys, " ")
+		fmt.Fprintf(ew, "%s {\n%s}\n\n", strings.Join(keys, " "), text)
+	}
+	return ew.Err()
 }
 
 type caddyBlock map[string][]caddyDirective
@@ -233,3 +242,28 @@ func quoteSlice(ss []string, sep string) {
 		}
 	}
 }
+
+type errWriter struct {
+	w   io.Writer
+	n   int64
+	err error
+}
+
+func newErrWriter(w io.Writer) *errWriter {
+	if ew, ok := w.(*errWriter); ok {
+		return ew
+	}
+	return &errWriter{w: w}
+}
+
+func (ew *errWriter) Write(p []byte) (int, error) {
+	if ew.err != nil {
+		return 0, ew.err
+	}
+	n, err := ew.w.Write(p)
+	ew.n += int64(n)
+	ew.err = err
+	return n, err
+}
+func (ew *errWriter) Count() int64 { return ew.n }
+func (ew *errWriter) Err() error   { return ew.err }
