@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/kylelemons/godebug/diff"
 	"github.com/mholt/caddy/caddyfile"
 )
 
@@ -24,8 +26,12 @@ func TestCaddyBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cb := convertCaddyBlock(blocks[0])
-	t.Logf("cb:%#v", cb)
 
+	var gBuf, wBuf bytes.Buffer
+	gE := json.NewEncoder(&gBuf)
+	gE.SetIndent("", "  ")
+	wE := json.NewEncoder(&wBuf)
+	wE.SetIndent("", "  ")
 	for key, want := range map[string][]caddyDirective{
 		"tls": {{
 			Main: caddyLine{
@@ -36,10 +42,35 @@ func TestCaddyBlocks(t *testing.T) {
 				caddyLine{Name: "protocols", Args: []string{"tls1.0", "tls1.2"}},
 			},
 		}},
+
 		"log": {{Main: caddyLine{Name: "log", Args: []string{"{BRUNO_HOME}/data/mai/log/ws-proxy.log"}}}},
+
+		"rewrite": {
+			{Main: caddyLine{Name: "rewrite"},
+				Params: []caddyLine{
+					caddyLine{Name: "r", Args: []string{"/Dealer/(.*)"}},
+					caddyLine{Name: "to", Args: []string{"/letme/Dealer/{1}"}},
+				}},
+			{Main: caddyLine{Name: "rewrite"},
+				Params: []caddyLine{
+					caddyLine{Name: "r", Args: []string{"^(/letme)?/Dealer/Dealer/(.*)"}},
+					caddyLine{Name: "to", Args: []string{"/letme/Dealer/{1}"}},
+				}},
+		},
 	} {
-		if got := cb[key]; !reflect.DeepEqual(got, want) {
-			t.Errorf("%s: got %s, wanted %s.", key, got, want)
+		gBuf.Reset()
+		if err := gE.Encode(cb[key]); err != nil {
+			t.Fatalf("encode %#v: %v", cb[key], err)
+		}
+		wBuf.Reset()
+		if err := wE.Encode(want); err != nil {
+			t.Fatalf("encode %#v: %v", want, err)
+		}
+		if d := diff.Diff(
+			string(bytes.Replace(wBuf.Bytes(), []byte(": []"), []byte(": null"), -1)),
+			string(bytes.Replace(gBuf.Bytes(), []byte(": []"), []byte(": null"), -1)),
+		); d != "" {
+			t.Errorf("%s:\n%s", key, d)
 		}
 	}
 

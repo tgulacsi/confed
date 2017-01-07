@@ -51,6 +51,7 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 						case 1:
 							tt.SetPath(path, toIntfSlice(vv[0]))
 						default:
+							log.Printf("%q: %#v", k, vv)
 							ss := make([][]interface{}, len(vv))
 							for i, v := range vv {
 								ss[i] = toIntfSlice(v)
@@ -80,33 +81,6 @@ type caddyLine struct {
 	Args []string
 }
 
-func toIntfSlice(ss []string) []interface{} {
-	is := make([]interface{}, len(ss))
-	for i, s := range ss {
-		is[i] = s
-	}
-	return is
-}
-func asStringSlice(i interface{}) []string {
-	if i == nil {
-		return nil
-	}
-	if ss, ok := i.([]string); ok {
-		return ss
-	}
-	if is, ok := i.([]interface{}); ok {
-		ss := make([]string, len(is))
-		for i, v := range is {
-			if s, ok := v.(string); ok {
-				ss[i] = s
-			} else {
-				ss[i] = fmt.Sprintf("%v", v)
-			}
-		}
-		return ss
-	}
-	return nil
-}
 func convertCaddyBlock(block caddyfile.ServerBlock) caddyBlock {
 	cb := make(caddyBlock, len(block.Tokens))
 	for k, tokens := range block.Tokens {
@@ -134,12 +108,15 @@ func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
 	tokens = tokens[1:]
 	ss := make([]string, 0, len(tokens))
 
+	if dir.Main.Name == "rewrite" {
+		fmt.Printf("%q: %#v", dir.Main.Name, tokens)
+	}
 	var inParams bool
 	var prev int
 	var param caddyLine
 	for _, token := range tokens {
-		if dir.Main.Name == "log" {
-			fmt.Printf("%q dir=%#v ss=%q\n", token.Text, dir, ss)
+		if dir.Main.Name == "rewrite" {
+			fmt.Printf("%q dir=%#v iP=%t ss=%q\n", token.Text, dir, inParams, ss)
 		}
 		if !inParams {
 			if token.Text != "{" {
@@ -156,9 +133,12 @@ func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
 		}
 		if prev != token.Line { // new param
 			prev = token.Line
+			param.Args = ss[:len(ss):len(ss)]
+			ss = ss[len(ss):]
 			if param.Name != "" {
 				dir.Params = append(dir.Params, param)
 			}
+			param = caddyLine{}
 		}
 		if param.Name == "" {
 			param.Name = token.Text
@@ -176,4 +156,32 @@ func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
 		dir.Params = append(dir.Params, param)
 	}
 	return dir
+}
+
+func toIntfSlice(ss []string) []interface{} {
+	is := make([]interface{}, len(ss))
+	for i, s := range ss {
+		is[i] = s
+	}
+	return is
+}
+func asStringSlice(i interface{}) []string {
+	if i == nil {
+		return nil
+	}
+	if ss, ok := i.([]string); ok {
+		return ss
+	}
+	if is, ok := i.([]interface{}); ok {
+		ss := make([]string, len(is))
+		for i, v := range is {
+			if s, ok := v.(string); ok {
+				ss[i] = s
+			} else {
+				ss[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		return ss
+	}
+	return nil
 }
