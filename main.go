@@ -3,12 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -58,6 +58,10 @@ func Main() error {
 		line := bytes.TrimSpace(scanner.Bytes())
 		i := bytes.IndexByte(line, ' ')
 		if i < 0 {
+			if bytes.Equal(line, []byte("print")) {
+				doPrint = true
+				continue
+			}
 			if bytes.Equal(line, []byte("dump")) {
 				m := cfg.AllSettings()
 				log.Printf("DUMP %d", len(m))
@@ -75,18 +79,29 @@ func Main() error {
 			continue
 		}
 		cmd, path := string(line[:i]), string(line[i+1:])
+		defer os.Stdout.Close()
 		switch cmd {
 		case "print":
 			doPrint = true
 		case "get":
 			v := cfg.Get(path)
-			b, err := json.Marshal(map[string]interface{}{path: v})
-			if err != nil {
-				log.Println(err)
+			log.Printf("GET %q: %T", path, v)
+			res := make(map[string]interface{})
+			switch x := v.(type) {
+			case error:
+				log.Fatalf("ERROR: %#v", err)
+			case map[string]interface{}:
+				res = x
+			case []map[string]interface{}:
+				for i, m := range x {
+					res[strconv.Itoa(i)] = m
+				}
+			default:
+				res[path] = v
 			}
-			//log.Printf("%#v", v)
-			os.Stdout.Write(b)
-			os.Stdout.Write([]byte{'\n'})
+			if err := enc.Encode(os.Stdout, config.New(res)); err != nil {
+				return err
+			}
 		case "set":
 			doPrint = true
 			var value string

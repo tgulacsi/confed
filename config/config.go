@@ -47,6 +47,11 @@ type Config struct {
 	tbd []string
 }
 
+// New returns a new Config from the given map.
+func New(m map[string]interface{}) Config {
+	return Config{TomlTree: toml.TreeFromMap(m)}
+}
+
 func (cfg Config) String() string {
 	var buf bytes.Buffer
 	if _, err := cfg.TomlTree.WriteToToml(&buf, "", ""); err != nil {
@@ -148,7 +153,9 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		_, err = w.Write(b)
 		return err
 	case "json":
-		return json.NewEncoder(w).Encode(m)
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(m)
 	case "hcl":
 		return errors.Wrap(ErrNotImplemented, "hcl")
 	case "toml":
@@ -197,11 +204,22 @@ func (cfg Config) Get(key string) interface{} {
 	if !strings.HasPrefix(key, "$") {
 		return cfg.TomlTree.Get(key)
 	}
-	tt := toml.TreeFromMap(cfg.AllSettings())
-	qr, err := tt.Query(key)
+	//tt := toml.TreeFromMap(cfg.AllSettings())
+	//qr, err := tt.Query(key)
+	qr, err := cfg.TomlTree.Query(key)
 	if qr == nil {
 		return err
 	}
-	return qr.Values()
-	return qr
+	result := make([]map[string]interface{}, len(qr.Values()))
+	for i, v := range qr.Values() {
+		switch x := v.(type) {
+		case *toml.TomlTree:
+			result[i] = x.ToMap()
+		case map[string]interface{}:
+			result[i] = x
+		default:
+			result[i] = map[string]interface{}{"error": errors.Errorf("cannot convert %T to map[string]interface{}: %v", v, v)}
+		}
+	}
+	return result
 }
