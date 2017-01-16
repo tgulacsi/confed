@@ -6,15 +6,13 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mholt/caddy/caddyfile"
 	toml "github.com/pelletier/go-toml"
 )
 
 type caddyEncDec struct{}
-
-var caddyQuoteKey = strings.NewReplacer(".", "%2E").Replace
-var caddyUnquoteKey = strings.NewReplacer("%2E", ".").Replace
 
 func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 	var buf bytes.Buffer
@@ -205,6 +203,39 @@ func caddyParseTokenGroup(tokens []caddyfile.Token) caddyDirective {
 		dir.Params = append(dir.Params, param)
 	}
 	return dir
+}
+
+func caddyQuoteKey(s string) string {
+	b := make([]byte, 1, 1+len(s)*2+1)
+	var needsQuote bool
+	for _, r := range s {
+		switch r {
+		case ':', '.', '/':
+			needsQuote = true
+		case '"':
+			needsQuote = true
+			b = append(b, '\\')
+		}
+		n := utf8.EncodeRune(b[len(b):cap(b)], r)
+		b = b[:len(b)+n]
+	}
+	if needsQuote {
+		b[0] = '"'
+		b = append(b, '"')
+	} else {
+		b = b[1:]
+	}
+	return string(b)
+}
+func caddyUnquoteKey(s string) string {
+	if s == "" {
+		return s
+	}
+	if !(strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`)) {
+		return s
+	}
+	s = s[1 : len(s)-1]
+	return strings.Replace(s, `\"`, `"`, -1)
 }
 
 func toIntfSlice(ss []string) []interface{} {

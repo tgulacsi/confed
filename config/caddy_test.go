@@ -98,6 +98,24 @@ func TestCaddyBlocks(t *testing.T) {
 	t.Logf("proxy=%#v", proxy)
 }
 
+func TestCaddyQuote(t *testing.T) {
+	for _, s := range [][2]string{
+		{"a", "a"},
+		{".", `"."`},
+		{"\"", `"\""`},
+		{"http://0.0.0.0:4444", `"http://0.0.0.0:4444"`},
+	} {
+		q := caddyQuoteKey(s[0])
+		p := caddyUnquoteKey(q)
+		if s[0] != p {
+			t.Errorf("%q: %q", s[0], p)
+		}
+		if q != s[1] {
+			t.Errorf("%q: got %q, wanted %q.", s[0], q, s[1])
+		}
+	}
+}
+
 func TestConvertCT(t *testing.T) {
 	var ed caddyEncDec
 	cfg, err := ed.Decode(strings.NewReader(caddyTest1))
@@ -113,22 +131,22 @@ func TestConvertCT(t *testing.T) {
 }
 
 const caddyTest1TOML = `
-[http://0%2E0%2E0%2E0:4444]
+["http://0.0.0.0:4444"]
 
-  [http://0%2E0%2E0%2E0:4444.log]
+  ["http://0.0.0.0:4444".log]
     args = ["{BRUNO_HOME}/data/mai/log/grafana-proxy.log"]
 
-  [http://0%2E0%2E0%2E0:4444.proxy]
+  ["http://0.0.0.0:4444".proxy]
     args = ["/","http://192.168.3.110:3000"]
     header_upstream = ["-Proxy",""]
     without = ["/metrics/mabisz"]
 
-[http://0%2E0%2E0%2E0:{portof_aodb_http}]
+["http://0.0.0.0:{portof_aodb_http}"]
 
-  [http://0%2E0%2E0%2E0:{portof_aodb_http}.log]
+  ["http://0.0.0.0:{portof_aodb_http}".log]
     args = ["{BRUNO_HOME}/data/mai/log/aodb-proxy.log"]
 
-  [http://0%2E0%2E0%2E0:{portof_aodb_http}.proxy]
+  ["http://0.0.0.0:{portof_aodb_http}".proxy]
     args = ["/","unix:{BRUNO_HOME}/data/ws/aodb.socket"]
     fail_timeout = ["1s"]
     header_upstream = ["-Proxy",""]
@@ -138,39 +156,39 @@ const caddyTest1TOML = `
     try_duration = ["3s"]
     without = ["/_macroexpert"]
 
-[https://0%2E0%2E0%2E0:{portof_aodb_https}]
+["https://0.0.0.0:{portof_aodb_https}"]
 
-  [https://0%2E0%2E0%2E0:{portof_aodb_https}.log]
+  ["https://0.0.0.0:{portof_aodb_https}".log]
     args = ["{BRUNO_HOME}/data/mai/log/aodb-proxy-https.log"]
 
-  [https://0%2E0%2E0%2E0:{portof_aodb_https}.proxy]
+  ["https://0.0.0.0:{portof_aodb_https}".proxy]
     args = ["/","http://localhost:"]
     header_upstream = ["-Proxy",""]
     without = ["/_macroexpert"]
 
-  [https://0%2E0%2E0%2E0:{portof_aodb_https}.tls]
+  ["https://0.0.0.0:{portof_aodb_https}".tls]
     args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
     protocols = ["tls1.0","tls1.2"]
 
-[https://0%2E0%2E0%2E0:{portof_splprn_admin_https}]
+["https://0.0.0.0:{portof_splprn_admin_https}"]
 
-  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.log]
+  ["https://0.0.0.0:{portof_splprn_admin_https}".log]
     args = ["{BRUNO_HOME}/data/mai/log/splprn_admin-proxy.log"]
 
-  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.proxy]
+  ["https://0.0.0.0:{portof_splprn_admin_https}".proxy]
     args = ["/","http://localhost:{portof_splprn_admin}"]
     header_upstream = ["-Proxy",""]
 
-  [https://0%2E0%2E0%2E0:{portof_splprn_admin_https}.tls]
+  ["https://0.0.0.0:{portof_splprn_admin_https}".tls]
     args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
     protocols = ["tls1.0","tls1.2"]
 
-[https://0%2E0%2E0%2E0:{portof_ws}]
+["https://0.0.0.0:{portof_ws}"]
 
-  [https://0%2E0%2E0%2E0:{portof_ws}.log]
+  ["https://0.0.0.0:{portof_ws}".log]
     args = ["{BRUNO_HOME}/data/mai/log/ws-proxy.log"]
 
-  [https://0%2E0%2E0%2E0:{portof_ws}.proxy]
+  ["https://0.0.0.0:{portof_ws}".proxy]
     args = ["/","unix:{BRUNO_HOME}/data/ws/ws-1.socket","unix:{BRUNO_HOME}/data/ws/ws-1.socket"]
     fail_timeout = ["9s"]
     header_upstream = ["X-Forwarded-For","{remote}"]
@@ -180,11 +198,11 @@ const caddyTest1TOML = `
     try_duration = ["10s"]
     without = ["/letme"]
 
-  [https://0%2E0%2E0%2E0:{portof_ws}.rewrite]
+  ["https://0.0.0.0:{portof_ws}".rewrite]
     r = ["^(/letme)?/Dealer/Dealer/(.*)"]
     to = ["/letme/Dealer/{1}"]
 
-  [https://0%2E0%2E0%2E0:{portof_ws}.tls]
+  ["https://0.0.0.0:{portof_ws}".tls]
     args = ["{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.crt.pem","{BRUNO_HOME}/../admin/ssl/lnx-dev-kbe.unosoft.local.key.pem"]
     protocols = ["tls1.0","tls1.2"]
 `
