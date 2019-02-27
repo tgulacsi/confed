@@ -1,3 +1,18 @@
+// Copyright 2019 Tamás Gulácsi
+//
+//
+//    Licensed under the Apache License, Version 2.0 (the "License");
+//    you may not use this file except in compliance with the License.
+//    You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+//    Unless required by applicable law or agreed to in writing, software
+//    distributed under the License is distributed on an "AS IS" BASIS,
+//    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//    See the License for the specific language governing permissions and
+//    limitations under the License.
+
 package config
 
 import (
@@ -21,7 +36,10 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 		return Config{}, err
 	}
 
-	tt := toml.TreeFromMap(make(map[string]interface{}, len(blocks)*64))
+	tt, err := toml.TreeFromMap(make(map[string]interface{}, len(blocks)*64))
+	if err != nil {
+		return Config{Tree: tt}, err
+	}
 	for _, block := range blocks {
 		cb := convertCaddyBlock(block)
 		// key: {directive:}
@@ -59,11 +77,11 @@ func (ed caddyEncDec) Decode(r io.Reader) (Config, error) {
 		}
 	}
 
-	return Config{TomlTree: tt}, nil
+	return Config{Tree: tt}, nil
 }
 
 func (ed caddyEncDec) Encode(w io.Writer, cfg Config) error {
-	m0 := cfg.TomlTree.ToMap()
+	m0 := cfg.Tree.ToMap()
 	seen := make(map[string][]string, len(m0))
 	var buf bytes.Buffer
 	for rK, rV := range m0 {

@@ -1,3 +1,18 @@
+// Copyright 2019 Tamás Gulácsi
+//
+//
+//    Licensed under the Apache License, Version 2.0 (the "License");
+//    you may not use this file except in compliance with the License.
+//    You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+//    Unless required by applicable law or agreed to in writing, software
+//    distributed under the License is distributed on an "AS IS" BASIS,
+//    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//    See the License for the specific language governing permissions and
+//    limitations under the License.
+
 package config
 
 import (
@@ -12,6 +27,7 @@ import (
 	"github.com/hashicorp/hcl"
 	"github.com/magiconair/properties"
 	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/query"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/pkg/errors"
@@ -40,21 +56,22 @@ type EncoderDecoder interface {
 	Decoder
 }
 
-// Config is the read, modifyable configuration, based on *toml.TomlTree.
+// Config is the read, modifyable configuration, based on *toml.Tree.
 type Config struct {
-	*toml.TomlTree
+	*toml.Tree
 	// tbd is the list of keys to be deleted (at Encode).
 	tbd []string
 }
 
 // New returns a new Config from the given map.
-func New(m map[string]interface{}) Config {
-	return Config{TomlTree: toml.TreeFromMap(m)}
+func New(m map[string]interface{}) (Config, error) {
+	tt, err := toml.TreeFromMap(m)
+	return Config{Tree: tt}, err
 }
 
 func (cfg Config) String() string {
 	var buf bytes.Buffer
-	if _, err := cfg.TomlTree.WriteToToml(&buf, "", ""); err != nil {
+	if _, err := cfg.Tree.WriteTo(&buf); err != nil {
 		panic(err)
 	}
 	return buf.String()
@@ -65,13 +82,13 @@ type Type string
 
 var encdecMu sync.RWMutex
 var encdec = map[Type]EncoderDecoder{
-	"caddy":      caddyEncDec{},
-	"hcl":        defaultEncDec{Type: "hcl"},
-	"ini":        iniEncDec{},
-	"json":       defaultEncDec{Type: "json"},
-	"properties": defaultEncDec{Type: "properties"},
-	"toml":       defaultEncDec{Type: "toml"},
-	"yaml":       defaultEncDec{Type: "yaml"},
+	"caddy":    caddyEncDec{},
+	hcl:        defaultEncDec{Type: hcl},
+	"ini":      iniEncDec{},
+	"json":     defaultEncDec{Type: "json"},
+	properties: defaultEncDec{Type: properties},
+	"toml":     defaultEncDec{Type: "toml"},
+	yaml:       defaultEncDec{Type: yaml},
 }
 
 // Register a new EncoderDecoder. Will panic if typ already registered.
@@ -100,12 +117,14 @@ func Dumper(typ Type) Encoder {
 
 type defaultEncDec struct{ Type string }
 
+const yaml, hcl, properties = "yaml", "hcl", "properties"
+
 func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	m := make(map[string]interface{})
 	var b []byte
 	var cfg Config
 	switch ved.Type {
-	case "yaml", "hcl", "properties":
+	case yaml, hcl, properties:
 		var err error
 		if b, err = ioutil.ReadAll(r); err != nil {
 			return cfg, err
@@ -115,9 +134,9 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	switch ved.Type {
 	case "toml":
 		tt, err := toml.LoadReader(r)
-		return Config{TomlTree: tt}, err
+		return Config{Tree: tt}, err
 
-	case "yaml":
+	case yaml:
 		if err := yaml.Unmarshal(b, m); err != nil {
 			return cfg, err
 		}
@@ -125,11 +144,11 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 		if err := json.NewDecoder(r).Decode(m); err != nil {
 			return cfg, err
 		}
-	case "hcl":
+	case hcl:
 		if err := hcl.Unmarshal(b, m); err != nil {
 			return cfg, err
 		}
-	case "properties":
+	case properties:
 		props, err := properties.Load(b, properties.UTF8)
 		if err != nil {
 			return cfg, err
@@ -140,12 +159,13 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	default:
 		return cfg, errors.Wrap(ErrUnknownType, ved.Type)
 	}
-	return Config{TomlTree: toml.TreeFromMap(m)}, nil
+	tt, err := toml.TreeFromMap(m)
+	return Config{Tree: tt}, err
 }
 func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 	m := cfg.AllSettings()
 	switch ved.Type {
-	case "yaml":
+	case yaml:
 		b, err := yaml.Marshal(m)
 		if err != nil {
 			return err
@@ -156,12 +176,15 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(m)
-	case "hcl":
-		return errors.Wrap(ErrNotImplemented, "hcl")
+	case hcl:
+		return errors.Wrap(ErrNotImplemented, hcl)
 	case "toml":
-		_, err := io.WriteString(w, toml.TreeFromMap(m).String())
+		tt, err := toml.TreeFromMap(m)
+		if _, wErr := io.WriteString(w, tt.String()); wErr != nil && err == nil {
+			return wErr
+		}
 		return err
-	case "properties":
+	case properties:
 		p := properties.NewProperties()
 		for k := range m {
 			p.Set(k, fmt.Sprintf("%v", cfg.Get(k)))
@@ -181,7 +204,7 @@ func (cfg *Config) Del(key string) {
 
 // AllSettings returns all settings, excluding the deleted keys.
 func (cfg Config) AllSettings() map[string]interface{} {
-	m := cfg.TomlTree.ToMap()
+	m := cfg.Tree.ToMap()
 	if len(cfg.tbd) == 0 {
 		return m
 	}
@@ -202,18 +225,19 @@ func (cfg Config) AllSettings() map[string]interface{} {
 // If the key starts with "$", then a JSONPath-like TOML Query is compiled and executed.
 func (cfg Config) Get(key string) interface{} {
 	if !strings.HasPrefix(key, "$") {
-		return cfg.TomlTree.Get(key)
+		return cfg.Tree.Get(key)
 	}
 	//tt := toml.TreeFromMap(cfg.AllSettings())
 	//qr, err := tt.Query(key)
-	qr, err := cfg.TomlTree.Query(key)
-	if qr == nil {
+	qry, err := query.Compile(key)
+	if qry == nil {
 		return err
 	}
+	qr := qry.Execute(cfg.Tree)
 	result := make([]map[string]interface{}, len(qr.Values()))
 	for i, v := range qr.Values() {
 		switch x := v.(type) {
-		case *toml.TomlTree:
+		case *toml.Tree:
 			result[i] = x.ToMap()
 		case map[string]interface{}:
 			result[i] = x
