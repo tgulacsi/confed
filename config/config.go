@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sort"
 	"strings"
 	"sync"
 
@@ -186,7 +187,12 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		return err
 	case propertiesEnc:
 		p := properties.NewProperties()
+		keys := make([]string, 0, len(m))
 		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
 			p.Set(k, fmt.Sprintf("%v", cfg.Get([]string{k})))
 		}
 		_, err := p.Write(w, properties.UTF8)
