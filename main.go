@@ -40,6 +40,7 @@ func Main() error {
 	flagTypeIn := flag.String("f", "json", "Type of input")
 	flagTypeOut := flag.String("t", "json", "Type of output")
 	flagNoCommands := flag.Bool("n", false, "don't read commands from stdin")
+	flagSep := flag.String("S", "/", "path separator")
 	flag.Parse()
 	fn := flag.Arg(0)
 	inp, err := os.Open(fn)
@@ -86,7 +87,7 @@ func Main() error {
 				}
 				sort.Strings(keys)
 				for _, k := range keys {
-					fmt.Printf("%s: %+v\n", k, cfg.Get(k))
+					fmt.Printf("%s: %+v\n", k, cfg.Get(strings.Split(k, *flagSep)))
 				}
 				return nil
 			}
@@ -99,7 +100,7 @@ func Main() error {
 		case "print":
 			doPrint = true
 		case "get":
-			v := cfg.Get(path)
+			v := cfg.Get(strings.Split(path, *flagSep))
 			log.Printf("GET %q: %T", path, v)
 			res := make(map[string]interface{})
 			switch x := v.(type) {
@@ -127,7 +128,7 @@ func Main() error {
 			if i = strings.IndexByte(path, ' '); i > 0 {
 				path, value = path[:i], path[i+1:]
 			}
-			cfg.Set(path, value)
+			cfg.Set(strings.Split(path, *flagSep), value)
 		case "rm", "del":
 			doPrint = true
 			cfg.Del(path)

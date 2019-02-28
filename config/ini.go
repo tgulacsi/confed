@@ -57,7 +57,7 @@ func (ed iniEncDec) Encode(w io.Writer, cfg Config) error {
 		if i := strings.LastIndexByte(key, keyDelim[0]); i >= 0 {
 			section, k = key[:i], key[i+1:]
 		}
-		f.Section(section).Key(k).SetValue(fmt.Sprintf("%v", cfg.Get(key)))
+		f.Section(section).Key(k).SetValue(fmt.Sprintf("%v", cfg.Get([]string{key})))
 	}
 	_, err := f.WriteToIndent(w, "  ")
 	return errors.Wrap(err, "WriteToIndent")

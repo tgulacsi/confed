@@ -187,7 +187,7 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 	case propertiesEnc:
 		p := properties.NewProperties()
 		for k := range m {
-			p.Set(k, fmt.Sprintf("%v", cfg.Get(k)))
+			p.Set(k, fmt.Sprintf("%v", cfg.Get([]string{k})))
 		}
 		_, err := p.Write(w, properties.UTF8)
 		return err
@@ -198,8 +198,8 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 
 const keyDelim = "."
 
-func (cfg *Config) Del(key string) {
-	cfg.tbd = append(cfg.tbd, key)
+func (cfg *Config) Del(key ...string) {
+	cfg.tbd = append(cfg.tbd, key...)
 }
 
 // AllSettings returns all settings, excluding the deleted keys.
@@ -223,13 +223,13 @@ func (cfg Config) AllSettings() map[string]interface{} {
 // Get returns the value for the key.
 //
 // If the key starts with "$", then a JSONPath-like TOML Query is compiled and executed.
-func (cfg Config) Get(key string) interface{} {
-	if !strings.HasPrefix(key, "$") {
-		return cfg.Tree.Get(key)
+func (cfg Config) Get(key []string) interface{} {
+	if !strings.HasPrefix(key[0], "$") {
+		return cfg.Tree.GetPath(key)
 	}
 	//tt := toml.TreeFromMap(cfg.AllSettings())
 	//qr, err := tt.Query(key)
-	qry, err := query.Compile(key)
+	qry, err := query.Compile(key[0])
 	if qry == nil {
 		return err
 	}
@@ -246,4 +246,8 @@ func (cfg Config) Get(key string) interface{} {
 		}
 	}
 	return result
+}
+
+func (cfg Config) Set(key []string, value interface{}) {
+	cfg.Tree.SetPath(key, value)
 }
