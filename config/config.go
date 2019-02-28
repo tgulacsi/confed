@@ -26,6 +26,8 @@ import (
 	"sync"
 
 	"github.com/hashicorp/hcl"
+	"github.com/hashicorp/hcl/hcl/printer"
+
 	"github.com/magiconair/properties"
 	"github.com/pelletier/go-toml"
 	"github.com/pelletier/go-toml/query"
@@ -83,12 +85,12 @@ type Type string
 
 var encdecMu sync.RWMutex
 var encdec = map[Type]EncoderDecoder{
-	"caddy":       caddyEncDec{},
+	caddyEnc:      caddyEncDec{},
 	hclEnc:        defaultEncDec{Type: hclEnc},
-	"ini":         iniEncDec{},
-	"json":        defaultEncDec{Type: "json"},
+	iniEnc:        iniEncDec{},
+	jsonEnc:       defaultEncDec{Type: jsonEnc},
 	propertiesEnc: defaultEncDec{Type: propertiesEnc},
-	"toml":        defaultEncDec{Type: "toml"},
+	tomlEnc:       defaultEncDec{Type: tomlEnc},
 	yamlEnc:       defaultEncDec{Type: yamlEnc},
 }
 
@@ -118,7 +120,7 @@ func Dumper(typ Type) Encoder {
 
 type defaultEncDec struct{ Type string }
 
-const yamlEnc, hclEnc, propertiesEnc = "yaml", "hcl", "properties"
+const caddyEnc, hclEnc, iniEnc, jsonEnc, propertiesEnc, tomlEnc, yamlEnc = "caddy", "hcl", "ini", "json", "properties", "toml", "yaml"
 
 func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	m := make(map[string]interface{})
@@ -133,7 +135,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	}
 
 	switch ved.Type {
-	case "toml":
+	case tomlEnc:
 		tt, err := toml.LoadReader(r)
 		return Config{Tree: tt}, err
 
@@ -141,7 +143,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 		if err := yaml.Unmarshal(b, m); err != nil {
 			return cfg, err
 		}
-	case "json":
+	case jsonEnc:
 		if err := json.NewDecoder(r).Decode(m); err != nil {
 			return cfg, err
 		}
@@ -173,13 +175,13 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		}
 		_, err = w.Write(b)
 		return err
-	case "json":
+	case jsonEnc:
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(m)
 	case hclEnc:
-		return errors.Wrap(ErrNotImplemented, hclEnc)
-	case "toml":
+		return printer.Fprint(w, mapToNode(m, keyDelim))
+	case tomlEnc:
 		tt, err := toml.TreeFromMap(m)
 		if _, wErr := io.WriteString(w, tt.String()); wErr != nil && err == nil {
 			return wErr
@@ -201,8 +203,6 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		return errors.Wrap(ErrUnknownType, ved.Type)
 	}
 }
-
-const keyDelim = "."
 
 func (cfg *Config) Del(key ...string) {
 	cfg.tbd = append(cfg.tbd, key...)
