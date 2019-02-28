@@ -82,13 +82,13 @@ type Type string
 
 var encdecMu sync.RWMutex
 var encdec = map[Type]EncoderDecoder{
-	"caddy":    caddyEncDec{},
-	hcl:        defaultEncDec{Type: hcl},
-	"ini":      iniEncDec{},
-	"json":     defaultEncDec{Type: "json"},
-	properties: defaultEncDec{Type: properties},
-	"toml":     defaultEncDec{Type: "toml"},
-	yaml:       defaultEncDec{Type: yaml},
+	"caddy":       caddyEncDec{},
+	hclEnc:        defaultEncDec{Type: hclEnc},
+	"ini":         iniEncDec{},
+	"json":        defaultEncDec{Type: "json"},
+	propertiesEnc: defaultEncDec{Type: propertiesEnc},
+	"toml":        defaultEncDec{Type: "toml"},
+	yamlEnc:       defaultEncDec{Type: yamlEnc},
 }
 
 // Register a new EncoderDecoder. Will panic if typ already registered.
@@ -117,14 +117,14 @@ func Dumper(typ Type) Encoder {
 
 type defaultEncDec struct{ Type string }
 
-const yaml, hcl, properties = "yaml", "hcl", "properties"
+const yamlEnc, hclEnc, propertiesEnc = "yaml", "hcl", "properties"
 
 func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	m := make(map[string]interface{})
 	var b []byte
 	var cfg Config
 	switch ved.Type {
-	case yaml, hcl, properties:
+	case yamlEnc, hclEnc, propertiesEnc:
 		var err error
 		if b, err = ioutil.ReadAll(r); err != nil {
 			return cfg, err
@@ -136,7 +136,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 		tt, err := toml.LoadReader(r)
 		return Config{Tree: tt}, err
 
-	case yaml:
+	case yamlEnc:
 		if err := yaml.Unmarshal(b, m); err != nil {
 			return cfg, err
 		}
@@ -144,11 +144,11 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 		if err := json.NewDecoder(r).Decode(m); err != nil {
 			return cfg, err
 		}
-	case hcl:
+	case hclEnc:
 		if err := hcl.Unmarshal(b, m); err != nil {
 			return cfg, err
 		}
-	case properties:
+	case propertiesEnc:
 		props, err := properties.Load(b, properties.UTF8)
 		if err != nil {
 			return cfg, err
@@ -165,7 +165,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 	m := cfg.AllSettings()
 	switch ved.Type {
-	case yaml:
+	case yamlEnc:
 		b, err := yaml.Marshal(m)
 		if err != nil {
 			return err
@@ -176,15 +176,15 @@ func (ved defaultEncDec) Encode(w io.Writer, cfg Config) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(m)
-	case hcl:
-		return errors.Wrap(ErrNotImplemented, hcl)
+	case hclEnc:
+		return errors.Wrap(ErrNotImplemented, hclEnc)
 	case "toml":
 		tt, err := toml.TreeFromMap(m)
 		if _, wErr := io.WriteString(w, tt.String()); wErr != nil && err == nil {
 			return wErr
 		}
 		return err
-	case properties:
+	case propertiesEnc:
 		p := properties.NewProperties()
 		for k := range m {
 			p.Set(k, fmt.Sprintf("%v", cfg.Get(k)))
