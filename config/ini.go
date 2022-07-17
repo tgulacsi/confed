@@ -18,7 +18,6 @@ package config
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 
 	toml "github.com/pelletier/go-toml"
@@ -29,7 +28,7 @@ import (
 type iniEncDec struct{}
 
 func (ed iniEncDec) Decode(r io.Reader) (Config, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return Config{}, err
 	}

@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 	"strings"
 	"sync"
@@ -129,7 +128,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 	switch ved.Type {
 	case yamlEnc, hclEnc, propertiesEnc:
 		var err error
-		if b, err = ioutil.ReadAll(r); err != nil {
+		if b, err = io.ReadAll(r); err != nil {
 			return cfg, err
 		}
 	}
@@ -144,7 +143,7 @@ func (ved defaultEncDec) Decode(r io.Reader) (Config, error) {
 			return cfg, err
 		}
 	case jsonEnc:
-		if err := json.NewDecoder(r).Decode(m); err != nil {
+		if err := json.NewDecoder(r).Decode(&m); err != nil {
 			return cfg, err
 		}
 	case hclEnc:
